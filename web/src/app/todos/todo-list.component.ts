@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiClient } from '../shared/api/api-client';
+import { Router } from '@angular/router';
+import { ApiClient, ApiError, UnauthorizedError } from '../shared/api/api-client';
+import { AuthService } from '../shared/auth.service';
 
 export interface Todo {
   id: string;
@@ -76,6 +78,8 @@ export interface Todo {
 })
 export class TodoListComponent implements OnInit {
   private api = inject(ApiClient);
+  private auth = inject(AuthService);
+  private router = inject(Router);
 
   title = '';
   todos = signal<Todo[]>([]);
@@ -85,10 +89,9 @@ export class TodoListComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const list = await this.api.get<Todo[]>('/api/tasks');
-      this.todos.set(Array.isArray(list) ? list : []);
-    } catch {
-      this.error.set('Could not load tasks.');
+      await this.reload();
+    } catch (err) {
+      if (!this.handleAuthError(err)) this.error.set(this.describe('Could not load tasks', err));
     } finally {
       this.loading.set(false);
     }
@@ -101,12 +104,41 @@ export class TodoListComponent implements OnInit {
     this.error.set(null);
     try {
       const created = await this.api.post<Todo>('/api/tasks', { title });
-      this.todos.update(list => [...list, created && created.id ? created : { id: 'tmp-' + Date.now(), title, completed: false, createdAt: new Date().toISOString() }]);
+      // Optimistic append first, so the task is visible even if the re-read fails.
+      this.todos.update(list => [
+        ...list,
+        created && created.id ? created : { id: 'tmp-' + Date.now(), title, completed: false, createdAt: new Date().toISOString() },
+      ]);
       this.title = '';
-    } catch {
-      this.error.set('Could not add task.');
+      try {
+        const list = await this.api.get<Todo[]>('/api/tasks');
+        if (Array.isArray(list) && list.some(t => t.title === title)) this.todos.set(list);
+      } catch (err) {
+        this.handleAuthError(err);
+      }
+    } catch (err) {
+      if (!this.handleAuthError(err)) this.error.set(this.describe('Could not add task', err));
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private async reload(): Promise<void> {
+    const list = await this.api.get<Todo[]>('/api/tasks');
+    this.todos.set(Array.isArray(list) ? list : []);
+  }
+
+  /** Stale local session (cookie gone): sign out and send the user to log in again. */
+  private handleAuthError(err: unknown): boolean {
+    if (!(err instanceof UnauthorizedError)) return false;
+    this.auth.signOut();
+    void this.router.navigate(['/login'], { queryParams: { returnUrl: '/' } });
+    return true;
+  }
+
+  private describe(prefix: string, err: unknown): string {
+    if (err instanceof ApiError) return `${prefix} (${err.status}): ${err.message}`;
+    if (err instanceof Error && err.message) return `${prefix}: ${err.message}`;
+    return `${prefix}.`;
   }
 }

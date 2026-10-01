@@ -6,7 +6,9 @@ import { TodoListComponent } from '../todos/todo-list.component';
   standalone: true,
   imports: [TodoListComponent],
   template: `
-    <app-todo-list></app-todo-list>
+    <div class="dashboard-page" data-placeholder>
+      <app-todo-list></app-todo-list>
+    </div>
   `,
 })
 export class DashboardComponent {}
