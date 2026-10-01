@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface TaskDto {
@@ -30,5 +30,17 @@ export class TasksService {
       data: { title, ownerId },
       select: TASK_SELECT,
     });
+  }
+
+  async setCompleted(ownerId: string, id: string, rawCompleted: unknown): Promise<TaskDto> {
+    if (typeof rawCompleted !== 'boolean') {
+      throw new BadRequestException('completed must be a boolean');
+    }
+    const result = await this.prisma.task.updateMany({
+      where: { id, ownerId },
+      data: { completed: rawCompleted },
+    });
+    if (result.count === 0) throw new NotFoundException('task not found');
+    return this.prisma.task.findFirst({ where: { id, ownerId }, select: TASK_SELECT }) as Promise<TaskDto>;
   }
 }
