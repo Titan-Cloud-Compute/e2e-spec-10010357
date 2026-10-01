@@ -43,4 +43,9 @@ export class TasksService {
     if (result.count === 0) throw new NotFoundException('task not found');
     return this.prisma.task.findFirst({ where: { id, ownerId }, select: TASK_SELECT }) as Promise<TaskDto>;
   }
+
+  async remove(ownerId: string, id: string): Promise<void> {
+    const result = await this.prisma.task.deleteMany({ where: { id, ownerId } });
+    if (result.count === 0) throw new NotFoundException('task not found');
+  }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TasksService, TaskDto } from './tasks.service';
@@ -31,5 +31,11 @@ export class TasksController {
     @Body() body: { completed?: unknown },
   ): Promise<TaskDto> {
     return this.tasks.setCompleted(this.ownerId(req), id, body?.completed);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Req() req: Request, @Param('id') id: string): Promise<void> {
+    return this.tasks.remove(this.ownerId(req), id);
   }
 }

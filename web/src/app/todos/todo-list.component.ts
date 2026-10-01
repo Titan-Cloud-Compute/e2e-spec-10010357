@@ -52,6 +52,15 @@ export interface Todo {
                 />
                 <span class="todo-title" data-testid="todo-title">{{ todo.title }}</span>
               </label>
+              <button
+                type="button"
+                class="todo-delete"
+                data-testid="todo-delete"
+                [disabled]="removing().has(todo.id)"
+                (click)="remove(todo)"
+                [attr.aria-label]="'Delete ' + todo.title"
+                [attr.title]="'Delete ' + todo.title"
+              ><span class="todo-delete-icon" aria-hidden="true"></span></button>
             </li>
           }
         </ul>
@@ -82,12 +91,21 @@ export interface Todo {
     }
     .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
     .todo-list { list-style: none; margin: 0; padding: 0; }
-    .todo-item { padding: 0.75rem; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); }
+    .todo-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); }
     .todo-empty { color: var(--color-text-secondary); }
     .todo-error { color: var(--color-error); }
     .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .todo-label { display: flex; align-items: center; gap: 0.75rem; min-height: 44px; cursor: pointer; }
     .todo-label input { width: 20px; height: 20px; }
+    .todo-label { flex: 1; }
+    .todo-delete {
+      min-width: 44px; min-height: 44px;
+      background: none; border: none; border-radius: var(--radius-btn);
+      color: var(--color-text-secondary); cursor: pointer;
+    }
+    .todo-delete:hover { color: var(--color-error); }
+    .todo-delete:disabled { opacity: 0.6; cursor: not-allowed; }
+    .todo-delete-icon::before { content: '\\00d7'; }
     .todo-item--completed .todo-title { text-decoration: line-through; color: var(--color-text-secondary); }
   `],
 })
@@ -101,6 +119,7 @@ export class TodoListComponent implements OnInit {
   loading = signal(true);
   saving = signal(false);
   toggling = signal<Set<string>>(new Set());
+  removing = signal<Set<string>>(new Set());
   error = signal<string | null>(null);
 
   async ngOnInit(): Promise<void> {
@@ -156,6 +175,29 @@ export class TodoListComponent implements OnInit {
       if (!this.handleAuthError(err)) this.error.set(this.describe('Could not update task', err));
     } finally {
       this.toggling.update(s => { const n = new Set(s); n.delete(todo.id); return n; });
+    }
+  }
+
+  async remove(todo: Todo): Promise<void> {
+    if (this.removing().has(todo.id)) return;
+    const index = this.todos().findIndex(t => t.id === todo.id);
+    this.error.set(null);
+    // Optimistic removal: once the last task goes, the empty state shows again.
+    this.todos.update(list => list.filter(t => t.id !== todo.id));
+    this.removing.update(s => new Set([...s, todo.id]));
+    try {
+      await this.api.delete<void>('/api/tasks/' + encodeURIComponent(todo.id));
+    } catch (err) {
+      // Put the task back where it was.
+      this.todos.update(list => {
+        if (list.some(t => t.id === todo.id)) return list;
+        const next = [...list];
+        next.splice(index < 0 ? next.length : Math.min(index, next.length), 0, todo);
+        return next;
+      });
+      if (!this.handleAuthError(err)) this.error.set(this.describe('Could not delete task', err));
+    } finally {
+      this.removing.update(s => { const n = new Set(s); n.delete(todo.id); return n; });
     }
   }
 

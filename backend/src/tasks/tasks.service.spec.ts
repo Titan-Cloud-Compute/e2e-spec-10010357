@@ -10,6 +10,7 @@ function makePrisma() {
         Promise.resolve({ id: 't1', title: data.title, completed: false, createdAt: new Date() }),
       ),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       findFirst: jest.fn().mockResolvedValue({ id: 't1', title: 'x', completed: true, createdAt: new Date() }),
     },
   };
@@ -91,5 +92,29 @@ describe('TasksController', () => {
   it('rejects requests without a session', () => {
     const ctrl = new TasksController(new TasksService(makePrisma() as any));
     expect(() => ctrl.list({} as any)).toThrow(UnauthorizedException);
+  });
+});
+
+describe('TasksService.remove', () => {
+  it('deletes with an owner-scoped where', async () => {
+    const prisma = makePrisma();
+    const svc = new TasksService(prisma as any);
+    await svc.remove('u1', 't1');
+    expect(prisma.task.deleteMany).toHaveBeenCalledWith({ where: { id: 't1', ownerId: 'u1' } });
+  });
+
+  it('throws NotFoundException when nothing was deleted (missing or wrong owner)', async () => {
+    const prisma = makePrisma();
+    prisma.task.deleteMany.mockResolvedValue({ count: 0 });
+    const svc = new TasksService(prisma as any);
+    await expect(svc.remove('u1', 'missing')).rejects.toThrow(NotFoundException);
+  });
+
+  it('controller passes the session userId as ownerId', async () => {
+    const prisma = makePrisma();
+    const ctrl = new TasksController(new TasksService(prisma as any));
+    const req = { session: { userId: 'u9', role: 'USER', firmId: null } } as any;
+    await ctrl.remove(req, 't1');
+    expect(prisma.task.deleteMany).toHaveBeenCalledWith({ where: { id: 't1', ownerId: 'u9' } });
   });
 });
