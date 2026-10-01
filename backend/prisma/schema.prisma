@@ -53,6 +53,23 @@ model User {
   tokensCreated  RegistrationToken[] @relation("CreatedTokens")
   tokensConsumed RegistrationToken[] @relation("ConsumedTokens")
   passwordResetTokens PasswordResetToken[]
+  tasks               Task[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task (domain model — CRUD owned by add/complete/delete-todo story cards)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Task {
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
