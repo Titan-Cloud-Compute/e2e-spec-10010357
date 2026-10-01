@@ -40,7 +40,19 @@ export interface Todo {
       } @else {
         <ul class="todo-list" data-testid="todo-list">
           @for (todo of todos(); track todo.id) {
-            <li class="todo-item" data-testid="todo-item">{{ todo.title }}</li>
+            <li class="todo-item" data-testid="todo-item" [class.todo-item--completed]="todo.completed">
+              <label class="todo-label">
+                <input
+                  type="checkbox"
+                  data-testid="todo-toggle"
+                  [checked]="todo.completed"
+                  [disabled]="toggling().has(todo.id)"
+                  (change)="toggle(todo)"
+                  [attr.aria-label]="'Mark ' + todo.title + ' complete'"
+                />
+                <span class="todo-title" data-testid="todo-title">{{ todo.title }}</span>
+              </label>
+            </li>
           }
         </ul>
       }
@@ -74,6 +86,9 @@ export interface Todo {
     .todo-empty { color: var(--color-text-secondary); }
     .todo-error { color: var(--color-error); }
     .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .todo-label { display: flex; align-items: center; gap: 0.75rem; min-height: 44px; cursor: pointer; }
+    .todo-label input { width: 20px; height: 20px; }
+    .todo-item--completed .todo-title { text-decoration: line-through; color: var(--color-text-secondary); }
   `],
 })
 export class TodoListComponent implements OnInit {
@@ -85,6 +100,7 @@ export class TodoListComponent implements OnInit {
   todos = signal<Todo[]>([]);
   loading = signal(true);
   saving = signal(false);
+  toggling = signal<Set<string>>(new Set());
   error = signal<string | null>(null);
 
   async ngOnInit(): Promise<void> {
@@ -120,6 +136,26 @@ export class TodoListComponent implements OnInit {
       if (!this.handleAuthError(err)) this.error.set(this.describe('Could not add task', err));
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async toggle(todo: Todo): Promise<void> {
+    const next = !todo.completed;
+    // Optimistic update
+    this.todos.update(list => list.map(t => t.id === todo.id ? { ...t, completed: next } : t));
+    // Mark as in-flight
+    this.toggling.update(s => new Set([...s, todo.id]));
+    try {
+      const updated = await this.api.patch<Todo>('/api/tasks/' + encodeURIComponent(todo.id), { completed: next });
+      if (updated && updated.id) {
+        this.todos.update(list => list.map(t => t.id === updated.id ? updated : t));
+      }
+    } catch (err) {
+      // Revert on error
+      this.todos.update(list => list.map(t => t.id === todo.id ? { ...t, completed: todo.completed } : t));
+      if (!this.handleAuthError(err)) this.error.set(this.describe('Could not update task', err));
+    } finally {
+      this.toggling.update(s => { const n = new Set(s); n.delete(todo.id); return n; });
     }
   }
 
