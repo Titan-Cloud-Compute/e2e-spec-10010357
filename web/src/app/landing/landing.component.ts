@@ -1,11 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../shared/auth.service';
+import { TodoListComponent } from '../todos/todo-list.component';
 
 @Component({
   selector: 'app-landing',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, TodoListComponent],
   template: `
+    @if (auth.isAuthenticated()) {
+    <app-todo-list></app-todo-list>
+    } @else {
     <div class="landing-page">
       <div class="landing-hero">
         <div class="landing-logo">
@@ -21,6 +26,7 @@ import { RouterLink } from '@angular/router';
         </div>
       </div>
     </div>
+    }
   `,
   styles: [`
     .landing-page {
@@ -73,4 +79,6 @@ import { RouterLink } from '@angular/router';
     }
   `]
 })
-export class LandingComponent {}
+export class LandingComponent {
+  auth = inject(AuthService);
+}
